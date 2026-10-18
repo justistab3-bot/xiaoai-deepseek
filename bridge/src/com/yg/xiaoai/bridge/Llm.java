@@ -15,6 +15,8 @@ public final class Llm {
     }
 
     private static final List<String[]> HISTORY = new ArrayList<String[]>();
+    /** 上次用的人设，变了就清历史，否则模型会一直顺着旧人设演 */
+    private static String sLastPrompt = null;
 
     private Llm() {}
 
@@ -28,8 +30,17 @@ public final class Llm {
             throw new IllegalStateException("没有配置 llm_key，见 /sdcard/xiaoai_bridge.json");
         }
 
+        String prompt = Cfg.sysPrompt();
+        synchronized (HISTORY) {
+            if (sLastPrompt != null && !sLastPrompt.equals(prompt)) {
+                HISTORY.clear();
+                Cfg.log("[llm ] 人设变了，已清空对话历史");
+            }
+            sLastPrompt = prompt;
+        }
+
         JSONArray messages = new JSONArray();
-        messages.put(new JSONObject().put("role", "system").put("content", Cfg.sysPrompt()));
+        messages.put(new JSONObject().put("role", "system").put("content", prompt));
         synchronized (HISTORY) {
             for (String[] m : HISTORY) {
                 messages.put(new JSONObject().put("role", m[0]).put("content", m[1]));
