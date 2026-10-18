@@ -92,15 +92,44 @@ public class MainActivity extends Activity {
             cfg.put("enabled", cbEnabled.isChecked());
             cfg.put("debug", cbDebug.isChecked());
 
-            File f = new File(CONF);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(cfg.toString(2).getBytes("UTF-8"));
-            fos.close();
+            writeConf(cfg.toString(2));
             status.setText("已保存，2 秒内生效");
             toast("已保存");
         } catch (Throwable t) {
             toast("保存失败：" + t.getMessage());
             status.setText("保存失败");
+        }
+    }
+
+    /**
+     * 写配置文件。
+     * /sdcard 是 FUSE 挂载，chmod 无效，而且这个设备上文件属主是 root，
+     * 普通 app 覆盖不了。所以先试直接写，失败就走 su。
+     */
+    private void writeConf(String json) throws Exception {
+        byte[] data = json.getBytes("UTF-8");
+
+        try {
+            FileOutputStream fos = new FileOutputStream(new File(CONF));
+            fos.write(data);
+            fos.close();
+            return;
+        } catch (Throwable directFail) {
+            // 落到 root 路径
+        }
+
+        File tmp = new File(getCacheDir(), "xiaoai_cfg.json");
+        FileOutputStream fos = new FileOutputStream(tmp);
+        fos.write(data);
+        fos.close();
+
+        String cmd = "cp '" + tmp.getAbsolutePath() + "' " + CONF
+                + " && chmod 644 " + CONF;
+        Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+        int code = p.waitFor();
+        tmp.delete();
+        if (code != 0) {
+            throw new Exception("需要 root 权限写入（su 返回 " + code + "）");
         }
     }
 
