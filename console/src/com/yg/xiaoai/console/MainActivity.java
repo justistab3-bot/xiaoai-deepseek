@@ -79,25 +79,31 @@ public class MainActivity extends Activity {
 
     private void saveCfg() {
         try {
-            // 保留未知字段，只更新界面上的
-            cfg.put("llm_url", txt(etUrl));
-            cfg.put("llm_key", txt(etKey));
-            cfg.put("llm_model", txt(etModel));
-            cfg.put("sys_prompt", txt(etPrompt));
-            cfg.put("passthrough_keywords", txt(etPass));
-            try {
-                cfg.put("history", Integer.parseInt(txt(etHistory)));
-            } catch (Throwable ignored) {
+            // 每个页签的控件只在切到那页时才创建，所以必须判空。
+            // 不判空的话，在「接口」页保存会因为 cbEnabled 为 null 直接崩；
+            // 更糟的是会把没创建的那几页对应的配置项写成空值。
+            if (etUrl != null) cfg.put("llm_url", txt(etUrl));
+            if (etKey != null) cfg.put("llm_key", txt(etKey));
+            if (etModel != null) cfg.put("llm_model", txt(etModel));
+            if (etPrompt != null) cfg.put("sys_prompt", txt(etPrompt));
+            if (etPass != null) cfg.put("passthrough_keywords", txt(etPass));
+            if (etHistory != null) {
+                try {
+                    cfg.put("history", Integer.parseInt(txt(etHistory)));
+                } catch (Throwable ignored) {
+                }
             }
-            cfg.put("enabled", cbEnabled.isChecked());
-            cfg.put("debug", cbDebug.isChecked());
+            if (cbEnabled != null) cfg.put("enabled", cbEnabled.isChecked());
+            if (cbDebug != null) cfg.put("debug", cbDebug.isChecked());
 
             writeConf(cfg.toString(2));
             status.setText("已保存，2 秒内生效");
             toast("已保存");
         } catch (Throwable t) {
-            toast("保存失败：" + t.getMessage());
-            status.setText("保存失败");
+            String msg = String.valueOf(t.getMessage());
+            android.util.Log.e("XiaoAiConsole", "save failed", t);
+            toast("保存失败：" + msg);
+            status.setText("保存失败：" + msg);
         }
     }
 
@@ -109,27 +115,57 @@ public class MainActivity extends Activity {
     private void writeConf(String json) throws Exception {
         byte[] data = json.getBytes("UTF-8");
 
+        String directErr = null;
         try {
             FileOutputStream fos = new FileOutputStream(new File(CONF));
             fos.write(data);
             fos.close();
             return;
         } catch (Throwable directFail) {
-            // 落到 root 路径
+            directErr = directFail.getClass().getSimpleName() + ": " + directFail.getMessage();
         }
 
         File tmp = new File(getCacheDir(), "xiaoai_cfg.json");
         FileOutputStream fos = new FileOutputStream(tmp);
         fos.write(data);
         fos.close();
+        if (tmp.length() != data.length) {
+            throw new Exception("临时文件写入不完整");
+        }
 
-        String cmd = "cp '" + tmp.getAbsolutePath() + "' " + CONF
-                + " && chmod 644 " + CONF;
-        Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+        String cmd = "cp '" + tmp.getAbsolutePath() + "' " + CONF + " && chmod 644 " + CONF;
+        String suBin = new File("/system/bin/su").exists() ? "/system/bin/su" : "su";
+
+        Process p;
+        try {
+            p = Runtime.getRuntime().exec(new String[]{suBin, "-c", cmd});
+        } catch (Throwable e) {
+            throw new Exception("调不起 su（直接写也失败：" + directErr + "）");
+        }
+
         int code = p.waitFor();
+        String err = drain(p.getErrorStream());
+        String out = drain(p.getInputStream());
         tmp.delete();
+
         if (code != 0) {
-            throw new Exception("需要 root 权限写入（su 返回 " + code + "）");
+            throw new Exception("su 返回 " + code
+                    + (err.length() > 0 ? "，" + err.trim() : "")
+                    + (out.length() > 0 ? "，" + out.trim() : "")
+                    + "（直接写：" + directErr + "）");
+        }
+    }
+
+    private static String drain(java.io.InputStream in) {
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[1024];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            return new String(bos.toByteArray(), "UTF-8");
+        } catch (Throwable t) {
+            return "";
         }
     }
 
