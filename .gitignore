@@ -1,0 +1,20 @@
+# 构建产物
+build/
+*.keystore
+
+# 日志
+*.log
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.iml
+
+# 本地临时文件
+*.tmp
+*.bak
