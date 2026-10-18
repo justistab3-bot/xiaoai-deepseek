@@ -242,6 +242,31 @@ adb reboot
 
 ---
 
+## 项目结构
+
+```
+release/          编译好的 APK，直接装
+bridge/           Xposed 模块源码
+console/          设备端控制台 App 源码
+scripts/          电脑端脚本
+docs/TECH.md      技术文档
+push.ps1          一键推送到 GitHub / Gitee（维护者用）
+```
+
+## 自己编译
+
+需要 JDK 8+ 和 Android SDK（build-tools 34+、platform 33+）。
+
+```powershell
+cd bridge;  .\build.ps1     # 生成 xiaoai-bridge.apk
+cd console; .\build.ps1     # 生成 xiaoai-console.apk
+```
+
+无 Gradle，纯 aapt2 + javac + d8 手工构建。这个模块只有几百行，拉一套 Gradle 不划算。
+
+---
+
 ## 许可
 
 MIT
+
